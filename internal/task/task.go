@@ -216,6 +216,7 @@ func (t *Task) tryInstallApp(item TaskItem) {
 		IpaPath:          v.IpaPath,
 		RemoveExtensions: v.RemoveExtensions,
 		DeviceName:       v.Device,
+		TeamID:           v.TeamID,
 	})
 	if startErr != nil || !logger.IsSuccess() {
 		effErr := startErr

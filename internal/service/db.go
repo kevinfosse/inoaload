@@ -112,6 +112,9 @@ func SaveApp(app model.InstalledApp) (*model.InstalledApp, error) {
 			}
 		}
 
+		if app.TeamID != "" {
+			cur.TeamID = app.TeamID
+		}
 		updateData := map[string]any{
 			"ipa_path":         cur.IpaPath,
 			"icon":             cur.Icon,
@@ -121,6 +124,7 @@ func SaveApp(app model.InstalledApp) (*model.InstalledApp, error) {
 			"refreshed_result": cur.RefreshedResult,
 			"refreshed_error":  cur.RefreshedError,
 			"password":         cur.Password,
+			"team_id":          cur.TeamID,
 		}
 		if result := db.Store().Model(&cur).Updates(updateData); result.Error != nil {
 			return nil, result.Error

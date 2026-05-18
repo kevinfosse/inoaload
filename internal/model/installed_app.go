@@ -28,7 +28,7 @@ type InstalledApp struct {
 	BundleIdentifier string         `json:"bundle_identifier"`
 	Version          string         `json:"version"`
 	RemoveExtensions bool           `json:"remove_extensions"`
-	TeamID           string         `json:"team_id,omitempty" gorm:"-"`
+	TeamID           string         `json:"team_id,omitempty"`
 	Enabled          bool           `json:"enabled,omitempty"`
 }
 
