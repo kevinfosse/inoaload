@@ -205,14 +205,6 @@ func (t *Task) tryInstallApp(item TaskItem) {
 		t.handleInstallFailure(item, v, manager.ErrAccountInvalid)
 		return
 	}
-	if !manager.IsRemoteUDID(v.UDID) {
-		err := fmt.Errorf("device %s is not a tvOS/iOS 17+ RemoteXPC target", v.UDID)
-		logger.Write("ERROR: " + err.Error())
-		logger.SaveLog(v.ID)
-		t.handleInstallFailure(item, v, err)
-		return
-	}
-
 	rm := manager.NewRemoteInstallManager()
 	rm.OnOutput(func(line string) { logger.Write(line) })
 	defer rm.Close()
