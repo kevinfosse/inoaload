@@ -1059,7 +1059,7 @@ type InstalledApp = {
   enabled: boolean
 }
 
-function AppsView() {
+function AppsView({ installingIds }: { installingIds: number[] }) {
   const [apps, setApps] = useState<InstalledApp[]>([])
   const [refreshing, setRefreshing] = useState<number | null>(null)
 
@@ -1179,7 +1179,7 @@ function AppsView() {
             <AppCard
               key={app.ID}
               app={app}
-              refreshing={refreshing === app.ID}
+              refreshing={refreshing === app.ID || installingIds.includes(app.ID)}
               onRefresh={() => refresh(app)}
               onReinstall={() => reinstall(app)}
               onDelete={() => remove(app)}
@@ -1313,11 +1313,139 @@ function expiryStatus(iso?: string): { label: string; variant: 'ok' | 'soon' | '
   return { label: `${days}d left`, variant: 'ok' }
 }
 
-function LogsView() {
+function LogsView({ installingIds }: { installingIds: number[] }) {
+  const [apps, setApps] = useState<InstalledApp[]>([])
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [logContent, setLogContent] = useState<string | null>(null)
+  const [loadingLog, setLoadingLog] = useState(false)
+  const logEndRef = useRef<HTMLDivElement | null>(null)
+
+  const loadApps = useCallback(async () => {
+    const list = await api<InstalledApp[]>('/api/apps').catch(() => null)
+    if (list) setApps(list)
+  }, [])
+
+  useEffect(() => {
+    loadApps()
+    const t = setInterval(loadApps, 4000)
+    return () => clearInterval(t)
+  }, [loadApps])
+
+  const fetchLog = useCallback(async (id: number) => {
+    setLoadingLog(true)
+    try {
+      const content = await api<string>(`/api/apps/${id}/log`)
+      setLogContent(content || '')
+    } catch {
+      setLogContent(null)
+    } finally {
+      setLoadingLog(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (selectedId === null) return
+    fetchLog(selectedId)
+  }, [selectedId, fetchLog])
+
+  // Auto-refresh log while the selected app is installing
+  useEffect(() => {
+    if (selectedId === null || !installingIds.includes(selectedId)) return
+    const t = setInterval(() => fetchLog(selectedId), 2000)
+    return () => clearInterval(t)
+  }, [selectedId, installingIds, fetchLog])
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [logContent])
+
+  const selected = apps.find((a) => a.ID === selectedId)
+
   return (
-    <div className="space-y-5">
-      <ViewHeader title="Logs" subtitle="Server and install traces" />
-      <EmptyState title="No log stream yet" hint="WebSocket tail coming soon." />
+    <div className="h-full flex flex-col space-y-4">
+      <ViewHeader
+        title="Logs"
+        subtitle="Re-sign task logs"
+        actions={
+          <Button variant="outline" size="sm" onClick={loadApps} className="no-drag gap-1.5">
+            <HugeiconsIcon icon={RefreshIcon} size={14} strokeWidth={1.8} />
+            Reload
+          </Button>
+        }
+      />
+
+      {apps.length === 0 ? (
+        <EmptyState title="No apps yet" hint="Install an app first, then re-sign logs will appear here." />
+      ) : (
+        <div className="flex-1 min-h-0 flex gap-4 overflow-hidden">
+          {/* Left: app list */}
+          <div className="w-64 shrink-0 flex flex-col gap-1.5 overflow-auto">
+            {apps.map((a) => {
+              const isInstalling = installingIds.includes(a.ID)
+              const isSelected = selectedId === a.ID
+              return (
+                <button
+                  key={a.ID}
+                  onClick={() => setSelectedId(a.ID)}
+                  className={`no-drag text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                    isSelected
+                      ? 'border-primary bg-primary/10'
+                      : 'border-border/60 hover:bg-accent/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {isInstalling && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                    )}
+                    {!isInstalling && a.refreshed_result && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    )}
+                    {!isInstalling && !a.refreshed_result && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-destructive shrink-0" />
+                    )}
+                    <span className="text-[12px] font-medium truncate">{a.ipa_name}</span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5 truncate pl-3.5">
+                    {isInstalling ? 'Running…' : a.device}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Right: log viewer */}
+          <div className="flex-1 min-w-0 flex flex-col rounded-xl border border-border/60 overflow-hidden">
+            {selectedId === null ? (
+              <div className="flex-1 flex items-center justify-center text-[12px] text-muted-foreground">
+                Select an app to view its log
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 bg-muted/20 shrink-0">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    {selected?.ipa_name ?? `App #${selectedId}`}
+                  </span>
+                  {installingIds.includes(selectedId) && (
+                    <span className="text-[10px] text-amber-400 font-mono animate-pulse">running…</span>
+                  )}
+                </div>
+                <div className="flex-1 overflow-auto bg-black/20 px-3 py-2 font-mono text-[11px] text-muted-foreground/90 whitespace-pre-wrap break-all">
+                  {loadingLog ? (
+                    <span className="text-muted-foreground/50">Loading…</span>
+                  ) : logContent === null ? (
+                    <span className="text-destructive">Failed to load log</span>
+                  ) : logContent === '' ? (
+                    <span className="text-muted-foreground/50">No log yet — task may still be queued</span>
+                  ) : (
+                    logContent
+                  )}
+                  <div ref={logEndRef} />
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1385,6 +1513,7 @@ export default function App() {
   const [devices, setDevices] = useState<Device[]>([])
   const [loading, setLoading] = useState(true)
   const [pairTarget, setPairTarget] = useState<Device | null>(null)
+  const [installingIds, setInstallingIds] = useState<number[]>([])
 
   const initialLoad = useRef(true)
 
@@ -1429,6 +1558,16 @@ export default function App() {
     return () => clearInterval(t)
   }, [load])
 
+  useEffect(() => {
+    const poll = async () => {
+      const ids = await api<number[]>('/api/apps/installing').catch(() => null)
+      if (ids !== null) setInstallingIds(ids)
+    }
+    poll()
+    const t = setInterval(poll, 3000)
+    return () => clearInterval(t)
+  }, [])
+
   // Re-fetch the moment the user navigates to Install so a just-completed pair
   // surfaces immediately instead of waiting for the next poll.
   useEffect(() => {
@@ -1469,8 +1608,8 @@ export default function App() {
               />
             )}
             {tab === 'install' && <InstallView devices={devices} />}
-            {tab === 'apps' && <AppsView />}
-            {tab === 'logs' && <LogsView />}
+            {tab === 'apps' && <AppsView installingIds={installingIds} />}
+            {tab === 'logs' && <LogsView installingIds={installingIds} />}
             {tab === 'settings' && <SettingsView />}
           </section>
         </div>

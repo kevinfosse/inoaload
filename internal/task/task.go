@@ -165,9 +165,6 @@ func (t *Task) startInstallAppInternal(v model.InstalledApp, notify bool, batchI
 }
 
 func (t *Task) runQueue() {
-	// Wait for one minute before install at startup to avoid the usbmuxd service not being ready.
-	time.Sleep(time.Minute)
-
 	for {
 		select {
 		case v := <-t.InstallAppQueue:
@@ -196,7 +193,7 @@ func (t *Task) tryInstallApp(item TaskItem) {
 	logger := manager.NewTaskLogger()
 	defer manager.CleanInstallTempFiles(v.IpaPath)
 
-	if v.Account == "" || v.UDID == "" {
+	if v.Account == "" || (v.UDID == "" && v.Device == "") {
 		logger.Write("account or UDID is empty")
 		logger.SaveLog(v.ID)
 		t.handleInstallFailure(item, v, fmt.Errorf("account or UDID is empty"))
@@ -397,6 +394,18 @@ func ScheduleRefreshApps() error {
 
 func RefreshApp(v model.InstalledApp) {
 	instance.StartInstallApps([]model.InstalledApp{v}, true)
+}
+
+// InstallingIDs returns the IDs of apps currently being installed by the queue.
+func InstallingIDs() []uint {
+	var ids []uint
+	instance.InstallingApps.Range(func(k, _ any) bool {
+		if id, ok := k.(uint); ok {
+			ids = append(ids, id)
+		}
+		return true
+	})
+	return ids
 }
 
 // RefreshExpiringNow scans installed apps on startup and queues any that are

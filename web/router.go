@@ -174,6 +174,23 @@ func route(fi *fiber.App) {
 		return c.Status(http.StatusOK).JSON(apiSuccess(apps))
 	})
 
+	api.Get("/apps/installing", func(c *fiber.Ctx) error {
+		return c.Status(http.StatusOK).JSON(apiSuccess(task.InstallingIDs()))
+	})
+
+	api.Get("/apps/:id/log", func(c *fiber.Ctx) error {
+		id := utils.MustParseInt(c.Params("id"))
+		logPath := filepath.Join(app.Config.Server.DataDir, "log", fmt.Sprintf("task_%d.log", id))
+		data, err := os.ReadFile(logPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return c.Status(http.StatusOK).JSON(apiSuccess(""))
+			}
+			return c.Status(http.StatusOK).JSON(apiError(err.Error()))
+		}
+		return c.Status(http.StatusOK).JSON(apiSuccess(string(data)))
+	})
+
 	api.Post("/apps/:id/delete", func(c *fiber.Ctx) error {
 		id := utils.MustParseInt(c.Params("id"))
 		ok, err := service.DeleteApp(uint(id))
